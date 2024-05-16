@@ -1,0 +1,6 @@
+# Print files
+*.3mf
+
+# Autodesk Inventor Files
+*.ipt
+*.iam
