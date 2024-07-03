@@ -27,6 +27,8 @@ fp-info-cache
 # Exported BOM files
 *.xml
 *.csv
+!production/positions.csv
+!production/bom.csv
 
 # Archive Files (zip, tar, etc.)
 *.zip
