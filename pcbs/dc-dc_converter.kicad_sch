@@ -5730,7 +5730,7 @@
 				)
 			)
 		)
-		(property "Value" "TPS54340BDDAR"
+		(property "Value" "TPS54360BDDAR"
 			(at 68.58 63.5 0)
 			(effects
 				(font
@@ -5767,7 +5767,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C524806"
+		(property "LCSC" "C44377"
 			(at 68.58 73.66 0)
 			(effects
 				(font
