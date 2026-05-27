@@ -1,0 +1,7 @@
+/firmware/gripper/build/
+/firmware/gripper/.vscode/
+/firmware/gripper/managed_components/
+/firmware/tiago/build/
+/firmware/tiago/.vscode/
+/firmware/tiago/managed_components/
+/firmware/tiago/.clangd
