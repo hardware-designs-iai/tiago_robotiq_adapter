@@ -20,46 +20,51 @@
 #include "espnow.h"
 #include "espnow_storage.h"
 #include "espnow_utils.h"
-
 #include "master_espnow.h"
 
 static const char *TAG = "Tiago master";
 
 static uint8_t buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE + 1];
 
-// External wiring / Gripper MAC options
-// uint8_t mac_address_gripper[] = {0x34, 0xb7, 0xda, 0x58, 0x7c, 0xb4}; 
-// uint8_t mac_address_gripper[] = {0x34, 0xb7, 0xda, 0x58, 0xcc, 0x70}; 
-uint8_t mac_address_gripper[] = {0xf0, 0xf5, 0xbd, 0x73, 0x12, 0x1c}; 
+// ---------------------------------------------------------
+// SLAVE MAC ADDRESSES
+// ---------------------------------------------------------
+#define NUM_SLAVES 2
 
-static int write_back_port = 0;
+uint8_t slave_macs[NUM_SLAVES][6] = {
+    {0xf0, 0xf5, 0xbd, 0x73, 0x12, 0x54}, // Slave 1 (Mapped to COM 0)
+    {0x34, 0xb7, 0xda, 0x58, 0xe8, 0x08}  // Slave 2 (Mapped to COM 1)
+}; 
 
+// ---------------------------------------------------------
+// USB RX (PC -> Master -> Specific Slave)
+// ---------------------------------------------------------
 void tinyusb_cdc_rx_callback(int itf, cdcacm_event_t *event)
 {
     size_t rx_size = 0;
+    
+    // Read into the global buffer
     esp_err_t ret = tinyusb_cdcacm_read(itf, buf, CONFIG_TINYUSB_CDC_RX_BUFSIZE, &rx_size);
     
-    if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "Data from channel %d. len: %d", itf, rx_size);
-        ESP_LOG_BUFFER_HEXDUMP(TAG, buf, rx_size, ESP_LOG_INFO);
+    if (ret == ESP_OK && rx_size > 0) {
         
-        write_back_port = itf;
+        // Allocate memory so concurrent USB ports don't overwrite each other
         char *str = (char *)malloc(rx_size + 1);
         if (str != NULL) {
-            // Use 'buf' directly
             memcpy(str, buf, rx_size); 
             str[rx_size] = '\0';  
             
-            ESP_LOGI(TAG, "Payload as string: %s  ,data_length: %d", str, rx_size);
-            
-            // Pass the array directly without the '&' reference
-            if(esp_now_send(mac_address_gripper, (uint8_t *)str, rx_size) == ESP_OK) {
-                ESP_LOGI(TAG, "Data has been sent to mac address");
+            // Route to the correct MAC based on which USB port received the data
+            if (itf == TINYUSB_CDC_ACM_0) {
+                esp_now_send(slave_macs[0], (uint8_t *)str, rx_size);
+            } 
+            else if (itf == TINYUSB_CDC_ACM_1) {
+                esp_now_send(slave_macs[1], (uint8_t *)str, rx_size);
             }
-            free(str);
-        }
+            
+            free(str); // Free the memory 
     } else {
-        ESP_LOGE(TAG, "Read error");
+        ESP_LOGE(TAG, "Read error on channel %d", itf);
     }
 }
 
@@ -70,6 +75,9 @@ void tinyusb_cdc_line_state_changed_callback(int itf, cdcacm_event_t *event)
     ESP_LOGI(TAG, "Line state changed on channel %d: DTR:%d, RTS:%d", itf, dtr, rts);
 }
 
+// ---------------------------------------------------------
+// WIFI & ESP-NOW SETUP
+// ---------------------------------------------------------
 static void master_wifi_init(void) {
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -80,18 +88,28 @@ static void master_wifi_init(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
-// Updated callback signature for v6.0 / ESP-NOW v2.x
 static void master_espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
-    ESP_LOGI(TAG, "Send data status: %d", status);
+    // Kept quiet
 }
 
+// ---------------------------------------------------------
+// ESP-NOW RX (Specific Slave -> Master -> Correct COM Port)
+// ---------------------------------------------------------
 static void master_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
+    
+    // EXACT ORIGINAL LOGIC for receiving data
     uint8_t local_buf_esp[CONFIG_TINYUSB_CDC_RX_BUFSIZE + 1];                               
     memcpy(local_buf_esp, data, len);
     
-    tinyusb_cdcacm_write_queue(write_back_port, local_buf_esp, (size_t)len);
-    tinyusb_cdcacm_write_flush(write_back_port, 0);
-    ESP_LOGI(TAG, "Received ESP-NOW data, forwarded to USB");
+    // Determine which USB port to send the response to based on the sender's MAC
+    int target_usb_port = TINYUSB_CDC_ACM_0; // Default to port 0
+    
+    if (memcmp(recv_info->src_addr, slave_macs[1], 6) == 0) {
+        target_usb_port = TINYUSB_CDC_ACM_1; // Switch to port 1 if Slave 2 sent it
+    }
+
+    tinyusb_cdcacm_write_queue(target_usb_port, local_buf_esp, (size_t)len);
+    tinyusb_cdcacm_write_flush(target_usb_port, 0);
 }
 
 static void master_esp_now_init(void) {
@@ -99,16 +117,24 @@ static void master_esp_now_init(void) {
     ESP_ERROR_CHECK(esp_now_register_send_cb(master_espnow_send_cb));
     ESP_ERROR_CHECK(esp_now_register_recv_cb(master_espnow_recv_cb));
     
-    // Initialize struct to 0 to prevent garbage data in background fields
     esp_now_peer_info_t peerInfo = {0}; 
     peerInfo.channel = 0;
     peerInfo.encrypt = false;
-    memcpy(peerInfo.peer_addr, mac_address_gripper, 6);
     
+    // Register Slave 1
+    memcpy(peerInfo.peer_addr, slave_macs[0], 6);
     ESP_ERROR_CHECK(esp_now_add_peer(&peerInfo));
-    ESP_LOGI(TAG, "After peer information setup");
+    
+    // Register Slave 2
+    memcpy(peerInfo.peer_addr, slave_macs[1], 6);
+    ESP_ERROR_CHECK(esp_now_add_peer(&peerInfo));
+    
+    ESP_LOGI(TAG, "ESP-NOW Peers Setup Complete");
 }
 
+// ---------------------------------------------------------
+// MAIN TASKS
+// ---------------------------------------------------------
 static void espnow_communication_task(void *pvParameter)
 {
     // Initialize NVS
@@ -136,27 +162,30 @@ void app_main(void)
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
     vTaskDelay(pdMS_TO_TICKS(10));
     
-    tinyusb_config_cdcacm_t acm_cfg = {
+    // Initialize COM Port 0 (Mapped to Slave 1)
+    tinyusb_config_cdcacm_t acm_cfg_0 = {
         .cdc_port = TINYUSB_CDC_ACM_0,
         .callback_rx = &tinyusb_cdc_rx_callback, 
         .callback_rx_wanted_char = NULL,
         .callback_line_state_changed = NULL,
         .callback_line_coding_changed = NULL
     };
-    
-    // Updated function name for v2.x
-    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg));
-    
+    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg_0));
     ESP_ERROR_CHECK(tinyusb_cdcacm_register_callback(
                         TINYUSB_CDC_ACM_0,
                         CDC_EVENT_LINE_STATE_CHANGED,
                         &tinyusb_cdc_line_state_changed_callback));
 
+    // Initialize COM Port 1 (Mapped to Slave 2)
 #if (CONFIG_TINYUSB_CDC_COUNT > 1)
-    acm_cfg.cdc_port = TINYUSB_CDC_ACM_1;
-    // Updated function name for v2.x
-    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg));
-    
+    tinyusb_config_cdcacm_t acm_cfg_1 = {
+        .cdc_port = TINYUSB_CDC_ACM_1,
+        .callback_rx = &tinyusb_cdc_rx_callback, 
+        .callback_rx_wanted_char = NULL,
+        .callback_line_state_changed = NULL,
+        .callback_line_coding_changed = NULL
+    };
+    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg_1));
     ESP_ERROR_CHECK(tinyusb_cdcacm_register_callback(
                         TINYUSB_CDC_ACM_1,
                         CDC_EVENT_LINE_STATE_CHANGED,

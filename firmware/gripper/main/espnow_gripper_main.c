@@ -36,8 +36,8 @@
 
 static const char *TAG = "gripper";
 
-// Master Node MAC Address (Updated to your actual MAC)
-static uint8_t master_mac[ESP_NOW_ETH_ALEN] = { 0xd0, 0xcf, 0x13, 0x0f, 0xee, 0x9c };
+// Master Node MAC Address
+static uint8_t master_mac[ESP_NOW_ETH_ALEN] = { 0x70, 0x04, 0x1d, 0xd3, 0x4b, 0x84 };
 
 // Dedicated static memory buffers for safe cross-task data sharing
 static uint8_t master_rx_buf[BUF_SIZE];
@@ -66,13 +66,11 @@ static void wifi_init(void)
     ESP_ERROR_CHECK( esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
 }
 
-// Updated v6.0 Signature
 static void gripper_espnow_send_cb(const esp_now_send_info_t *send_info, esp_now_send_status_t status)
 {
-    // Keeping this silent to prevent console spam at 100Hz
+    
 }
 
-// Updated v6.0 Signature
 static void gripper_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len)
 {
     if (data == NULL || len <= 0 || len > BUF_SIZE) {
@@ -189,7 +187,6 @@ static void rs485_communication_task(void *vParameter)
             }
         }
         
-        // A minimal 1-tick delay to keep the FreeRTOS watchdog happy
         vTaskDelay(pdMS_TO_TICKS(1)); 
     }
 }
