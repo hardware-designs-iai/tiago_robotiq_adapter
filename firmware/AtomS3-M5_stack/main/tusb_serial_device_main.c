@@ -26,15 +26,31 @@ static const char *TAG = "Tiago master";
 
 static uint8_t buf[CONFIG_TINYUSB_CDC_RX_BUFSIZE + 1];
 
-// ---------------------------------------------------------
-// SLAVE MAC ADDRESSES
-// ---------------------------------------------------------
+// ==============================================================================
+// ESP-NOW SLAVE MAC ADDRESS CONFIGURATION
+// ==============================================================================
+// Define the total number of receiving ESP32 slave nodes (Robotiq grippers).
 #define NUM_SLAVES 2
 
+// ------------------------------------------------------------------------------
+// IMPORTANT: Replace the hex values below with the actual Wi-Fi Station MAC 
+// addresses of your specific ESP32-S3 slave boards.
+//
+// Routing Information:
+// The index of the MAC address in this array dictates the Modbus RTU routing.
+// The Master node (AtomS3U) will map incoming serial data from specific virtual 
+// COM ports to the corresponding MAC address below.
+// ------------------------------------------------------------------------------
 uint8_t slave_macs[NUM_SLAVES][6] = {
-    {0xf0, 0xf5, 0xbd, 0x73, 0x12, 0x54}, // Slave 1 (Mapped to COM 0)
-    {0x34, 0xb7, 0xda, 0x58, 0xe8, 0x08}  // Slave 2 (Mapped to COM 1)
-}; 
+    
+    // --- Gripper 1 Node ---
+    // Modbus routing: Mapped to Virtual COM Port 0
+    {0xf0, 0xf5, 0xbd, 0x73, 0x12, 0x54}, 
+
+    // --- Gripper 2 Node ---
+    // Modbus routing: Mapped to Virtual COM Port 1
+    {0x34, 0xb7, 0xda, 0x58, 0xe8, 0x08}  
+};
 
 // ---------------------------------------------------------
 // USB RX (PC -> Master -> Specific Slave)

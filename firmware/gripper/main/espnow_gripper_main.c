@@ -36,7 +36,17 @@
 
 static const char *TAG = "gripper";
 
-// Master Node MAC Address
+// ==============================================================================
+// ESP-NOW MASTER MAC ADDRESS CONFIGURATION
+// ==============================================================================
+// IMPORTANT: Replace this hex value with the actual Wi-Fi Station MAC 
+// address of your Master node (the M5Stack AtomS3U connected to the PC).
+//
+// Routing Information:
+// The Slave nodes (ESP32-S3 grippers) use this specific address to know exactly 
+// where to route their Modbus RTU responses and acknowledgments back over the 
+// wireless bridge to the host PC's ros2_control hardware interface.
+// ------------------------------------------------------------------------------
 static uint8_t master_mac[ESP_NOW_ETH_ALEN] = { 0x70, 0x04, 0x1d, 0xd3, 0x4b, 0x84 };
 
 // Dedicated static memory buffers for safe cross-task data sharing
