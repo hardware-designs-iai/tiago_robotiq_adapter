@@ -19,7 +19,5 @@ python -m esptool -p /dev/ttyACM[x] read-mac
 ```bash
 idf.py -p /dev/ttyACM[x] flash
 ``` 
-    replace `x` with actual hardware address of Master device.
-
----
+replace `x` with actual hardware address of Master device.
     
