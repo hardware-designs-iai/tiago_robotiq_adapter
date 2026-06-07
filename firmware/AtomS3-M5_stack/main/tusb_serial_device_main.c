@@ -45,11 +45,11 @@ uint8_t slave_macs[NUM_SLAVES][6] = {
     
     // --- Gripper 1 Node ---
     // Modbus routing: Mapped to Virtual COM Port 0
-    {0xf0, 0xf5, 0xbd, 0x73, 0x12, 0x54}, 
+    {0xf0, 0xf5, 0xbd, 0x73, 0x12, 0x40}, 
 
     // --- Gripper 2 Node ---
     // Modbus routing: Mapped to Virtual COM Port 1
-    {0x34, 0xb7, 0xda, 0x58, 0xe8, 0x08}  
+    {0xf0, 0xf5, 0xbd, 0x73, 0x12, 0x1c}  
 };
 
 // ---------------------------------------------------------
@@ -79,10 +79,11 @@ void tinyusb_cdc_rx_callback(int itf, cdcacm_event_t *event)
             }
             
             free(str); // Free the memory 
+        } 
     } else {
         ESP_LOGE(TAG, "Read error on channel %d", itf);
     }
-}
+} 
 
 void tinyusb_cdc_line_state_changed_callback(int itf, cdcacm_event_t *event)
 {
