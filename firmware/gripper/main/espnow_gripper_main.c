@@ -100,13 +100,22 @@ static void gripper_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const u
 
 static esp_err_t espnow_init(void)
 {
+
+    /* Initialize ESPNOW and register sending and receiving callback function. */
+
     ESP_ERROR_CHECK( esp_now_init() );
     ESP_ERROR_CHECK( esp_now_register_send_cb(gripper_espnow_send_cb) );
     ESP_ERROR_CHECK( esp_now_register_recv_cb(gripper_espnow_recv_cb) );
     
     esp_now_peer_info_t peerInfo = {0};
+
+    //register peer
+    
     peerInfo.channel = 0;
     peerInfo.encrypt = false;
+
+    //register first peer
+
     memcpy(peerInfo.peer_addr, master_mac, 6);
     
     ESP_ERROR_CHECK( esp_now_add_peer(&peerInfo) );
@@ -117,9 +126,13 @@ static esp_err_t espnow_init(void)
 void app_main(void)
 {  
     // Queues hold the integer 'length' of the data, rather than dangerous pointers
+   // Allocate buffers for UART
+
     from_espnow  = xQueueCreate(10, sizeof(int));
     from_rs485   = xQueueCreate(10, sizeof(int));
    
+    // Initialize NVS
+
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK( nvs_flash_erase() );
@@ -163,9 +176,21 @@ static void rs485_communication_task(void *vParameter)
     };
 
     ESP_ERROR_CHECK(uart_driver_install(uart_num, BUF_SIZE * 2, 0, 0, NULL, 0));
+
+    // Configure UART parameters
+
     ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
+
+    // Set UART pins as per KConfig settings
+
     ESP_ERROR_CHECK(uart_set_pin(uart_num, rs485_TXD, rs485_RXD, rs485_RTS, rs485_CTS));
+
+    // Set RS485 half duplex mode
+
     ESP_ERROR_CHECK(uart_set_mode(uart_num, UART_MODE_RS485_HALF_DUPLEX));
+
+    // Set read timeout of UART TOUT feature
+
     ESP_ERROR_CHECK(uart_set_rx_timeout(uart_num, rs485_READ_TOUT));
     
     int len;
@@ -191,6 +216,8 @@ static void rs485_communication_task(void *vParameter)
                 gripper_rx_len = data_length;
                 
                 // Signal the ESP-NOW task immediately
+                /// ESP_LOGI("UART", "Data received from rs485 %s",(const char *) received_gripper_data);
+
                 if (xQueueSend(from_rs485, &data_length, pdMS_TO_TICKS(5)) != pdTRUE) {
                     ESP_LOGW(TAG, "Sending to queue failed");
                 }
