@@ -47,7 +47,7 @@ static const char *TAG = "gripper";
 // where to route their Modbus RTU responses and acknowledgments back over the 
 // wireless bridge to the host PC's ros2_control hardware interface.
 // ------------------------------------------------------------------------------
-static uint8_t master_mac[ESP_NOW_ETH_ALEN] = { 0x70, 0x04, 0x1d, 0xd3, 0x4b, 0x84 };
+static uint8_t master_mac[ESP_NOW_ETH_ALEN] = { 0x70, 0x04, 0x1d, 0xd3, 0x4a, 0xe0 };
 
 // Dedicated static memory buffers for safe cross-task data sharing
 static uint8_t master_rx_buf[BUF_SIZE];
@@ -209,16 +209,33 @@ static void rs485_communication_task(void *vParameter)
             // A packet is arriving! Wait 3ms to guarantee the gripper is finished speaking.
             vTaskDelay(pdMS_TO_TICKS(3)); 
             
-            // Now suck up the entire completed packet in one go
-            int data_length = uart_read_bytes(uart_num, gripper_rx_buf, BUF_SIZE-1, 0);
-            
-            if(data_length > 0){
-                gripper_rx_len = data_length;
+            // Robust read: accumulate bytes until no more arrive or timeout
+            int total = 0;
+            const int max_len = BUF_SIZE - 1;
+            const TickType_t wait_ticks = pdMS_TO_TICKS(rs485_READ_TOUT);
+
+            while (total < max_len) {
+                int n = uart_read_bytes(uart_num, gripper_rx_buf + total, max_len - total, wait_ticks);
+                if (n <= 0) {
+                    break; // timeout/no data
+                }
+                total += n;
+
+                // If buffer now empty, break early
+                size_t avail_after = 0;
+                uart_get_buffered_data_len(uart_num, &avail_after);
+                if (avail_after == 0) {
+                    break;
+                }
+                // small yield to allow more bytes to arrive (optional)
+                // vTaskDelay(pdMS_TO_TICKS(1));
+            }
+
+            if(total > 0){
+                gripper_rx_len = total;
                 
                 // Signal the ESP-NOW task immediately
-                /// ESP_LOGI("UART", "Data received from rs485 %s",(const char *) received_gripper_data);
-
-                if (xQueueSend(from_rs485, &data_length, pdMS_TO_TICKS(5)) != pdTRUE) {
+                if (xQueueSend(from_rs485, &total, pdMS_TO_TICKS(5)) != pdTRUE) {
                     ESP_LOGW(TAG, "Sending to queue failed");
                 }
             }
